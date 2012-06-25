@@ -7,6 +7,10 @@ the version 2.00-track.
 
 Revision history:
 
+1.08
+	Fri Jun 07 2012
+	- POD changes from Ben Bullock merged in.
+
 1.07
 	Fri May 25 2012
 	- Huh. A tester didn't have parent.pm in its BSD set-up. Weird.
