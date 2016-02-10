@@ -2,6 +2,7 @@ package Games::Maze::GridType::Square;
 
 # Squarish mazes.  Each row has equal number of columns
 
+use Data::Dumper;
 use Moo::Role;
 use namespace::clean;
 
@@ -36,37 +37,99 @@ sub createGrid {
 }
 
 sub toString {
-    my ($self) = @_;
+    my ($self, %params) = @_;
+    my $cellSize = $params{cellsize} || 3;
+    my $utf8 = $params{utf8} || 0;
+    $cellSize = 3 if ($cellSize < 3);
 
-    my $levels = $self->options()->{levels} || 1;
+    my $levels = $self->options()->{levels};
     my $rows = $self->options()->{rows};
     my $cols = $self->options()->{columns};
     my $output = '';
-    my $body = '   ';
-    my $corner = '+';
-    my $wall = '|';
-    my $door = ' ';
-    my $southwall = '---';
 
-    for (my $z = 0; $z < $levels; $z++) {
-        $output .= $corner . (($southwall . $corner) x $cols) . "\n";
-        for(my $y = 0; $y < $rows; $y++) {
-            my $top = $wall;
-            my $bottom = $corner;
-            for (my $x = 0; $x < $cols; $x++) {
-                my $cell = $self->getCell(row => $y, column => $x, level => $z);
-                my $east = $cell->linked($cell->east) ? $door : $wall;
-                $top .= $body . $east;
-                my $south = $cell->linked($cell->south) ? $body : $southwall;
-                $bottom .= $south . $corner;
+    my $iterator = $self->eachRow();
+    while (my $cells = $iterator->()) {
+        my @rowText;
+        foreach my $cell (@$cells) {
+            my @cellText = $cell->draw(cellsize => $cellSize, utf8 => $utf8);
+            for (my $i = 0; $i < scalar @cellText; $i++) {
+                $rowText[$i] .= $cellText[$i];
             }
-            $output .= $top . "\n" .
-                       $bottom . "\n";
         }
-        $output .= "\n";
+        $output .= "$_\n" foreach (@rowText);
     }
 
     return $output;
+}
+
+sub toImg {
+    my ($self, %params) = @_;
+    my $cellSize = $params{cellsize} || 10;
+    $cellSize = 3 if $cellSize < 3;
+    my $bgColor = $params{bgcolor} || 'white';
+    my $fgColor = $params{fgcolor} || 'black';
+    my $trueColor = $params{truecolor} || 0;
+    my $imgType = lc ($params{imagetype} || 'png');
+    my $filename = $params{filename} || 'maze_' . int(rand(100)) . '.png';
+
+    my $imgWidth = $cellSize * $self->options()->{columns} + 1;
+    my $imgHeight = $cellSize * $self->options()->{rows} + 1;
+
+    open my $IMGFILE, '>', $filename or die "Error: Unable to open $filename for output: $!";
+
+    my $svgSupported = 1;
+    require GD::SVG or ($svgSupported = 0);
+
+    my $supported = {
+        svg => undef,
+        gif => undef,
+        png => undef,
+        jpg => undef,
+        gd => undef,
+        gd2 => undef,
+        wbmp => undef
+    };
+    delete $supported->{svg} unless $svgSupported;
+
+    if (!exists $supported->{$imgType}) {
+        die "Error: Supported types are: " .
+        ($svgSupported ? 'svg, ' : '') . "gif, png, jpg, gd, gd2, wbmp.\n" .
+            "       Option 'imagetype' value $imgType is not supported.";
+    }
+
+    require GD::Simple or die 'Error: GD perl module is not installed.  Image output is not supported.';
+
+    if ($imgType eq 'svg') {
+        GD::Simple->class('GD::SVG');
+    }
+
+    my $img = GD::Simple->new($imgWidth, $imgHeight, $trueColor);
+
+    $img->fgcolor($fgColor);
+    $img->bgcolor($bgColor);
+
+    # do this for each level
+    my $iterator = $self->eachCell();
+    while (my $cell = $iterator->()) {
+        $cell->draw(cellsize => $cellSize, image => $img);
+    }
+    if ($imgType eq 'gif') {
+        print $IMGFILE $img->gif();
+    } elsif ($imgType eq 'png') {
+        print $IMGFILE $img->png();
+    } elsif ($imgType eq 'jpg') {
+        print $IMGFILE $img->jpeg();
+    } elsif ($imgType eq 'gd') {
+        print $IMGFILE $img->gd();
+    } elsif ($imgType eq 'gd2') {
+        print $IMGFILE $img->gd2();
+    } elsif ($imgType eq 'wbmp') {
+        print $IMGFILE $img->wbmp($fgColor);
+    } elsif ($imgType eq 'svg') {
+        print $IMGFILE $img->svg();
+    }
+
+    close $IMGFILE;
 }
 
 sub size {
