@@ -9,9 +9,10 @@ my %options = (
     cols => 5,
     levs => 1, # don't have multi-level mazes working yet
     seed => 42,
-    cellsize => 10,
+    cellsize => 3,
     method => 'RecursiveBacktracker',
     output => 'ascii',
+    utf8   => '0',
     filename => 'example_maze' # only used if output is not ascii (svg, png, etc.)
 );
 
@@ -23,6 +24,7 @@ GetOptions(
     'output=s' => \$options{output},
     'filename=s' => \$options{filename},
     'cellsize=i' => \$options{cellsize},
+    'utf8' => \$options{utf8},
 );
 #    'levs=i' => \$options{levs},
 
@@ -39,9 +41,13 @@ my $maze = Games::Maze->new(
 
 $options{output} = lc $options{output};
 if ($options{output} eq 'ascii') {
-    print $maze->toString(cellsize => $options{cellsize});
+    print $maze->toString(cellsize => $options{cellsize}, utf8 => $options{utf8});
 } elsif ($options{output} && $options{filename}) {
-    warn "DEZ: cellsize should be $options{cellsize}\n";
-    $maze->toImg(filename => $options{filename} . ".$options{output}", imagetype => $options{output}, cellsize => $options{cellsize});
+    $options{cellsize} = 10 if $options{cellsize} < 10;
+    if ($options{output} eq 'pdf') {
+        $maze->toPDF(filename => $options{filename} . ".$options{output}", imagetype => $options{output}, cellsize => $options{cellsize});
+    } else {
+        $maze->toImg(filename => $options{filename} . ".$options{output}", imagetype => $options{output}, cellsize => $options{cellsize});
+    }
 }
 

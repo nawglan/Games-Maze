@@ -1,6 +1,6 @@
 package Games::Maze::CellType::Square;
 
-use strict;
+use open      qw(:std :utf8);    # undeclared streams in UTF-8
 use Moo;
 use MooX::late;
 use namespace::clean;
@@ -10,25 +10,21 @@ extends "Games::Maze::Cell";
 has north => (
     is => 'rw',
     isa => 'Maybe[Games::Maze::Cell]',
-#    trigger => sub {my ($self, $target) = @_; warn ("DEZ: setting north for " . $self->id(size=>2) . " to " . $target->id(size=>2) . "\n");},
 );
 
 has south => (
     is => 'rw',
     isa => 'Maybe[Games::Maze::Cell]',
-#    trigger => sub {my ($self, $target) = @_; warn ("DEZ: setting south for " . $self->id(size=>2) . " to " . $target->id(size=>2) . "\n");},
 );
 
 has east => (
     is => 'rw',
     isa => 'Maybe[Games::Maze::Cell]',
-#    trigger => sub {my ($self, $target) = @_; warn ("DEZ: setting  east for " . $self->id(size=>2) . " to " . $target->id(size=>2) . "\n");},
 );
 
 has west => (
     is => 'rw',
     isa => 'Maybe[Games::Maze::Cell]',
-#    trigger => sub {my ($self, $target) = @_; warn ("DEZ: setting  west for " . $self->id(size=>2) . " to " . $target->id(size=>2) . "\n");},
 );
 
 # returns a list of cells that neighbor this cell
@@ -90,59 +86,217 @@ sub setNeighbors {
     }
 }
 
+sub toString {
+    my ($self, %params) = @_;
+    my $cellSize = $params{cellsize} || 3;
+    $cellSize = 3 if $cellSize < 3;
+    my $charset = $params{utf8} ? 'utf8' : 'ascii';
+    my $bodyContent = " " x $cellSize;
+    my $characters = {
+        utf8 => {
+            topleftcorner => "\x{250c}",
+            horizontalwall => "\x{2500}",
+            toprightcorner => "\x{2510}",
+            verticalwall => "\x{2502}",
+            halfvwalltop => "\x{2575}",
+            halfvwallbottom => "\x{2577}",
+            halfhwallleft => "\x{2574}",
+            halfhwallright => "\x{2576}",
+            door => " ",
+            fourwaycorner => "\x{253c}",
+            body => $bodyContent,
+            bottomleftcorner => "\x{2514}",
+            bottomrightcorner => "\x{2518}",
+            flattopwall => "\x{252c}",
+            flatleftwall => "\x{251c}",
+            flatrightwall => "\x{2524}",
+            flatbottomwall => "\x{2534}",
+        },
+        ascii => {
+            topleftcorner => "+",
+            horizontalwall => "-",
+            toprightcorner => "+",
+            verticalwall => "|",
+            door => " ",
+            fourwaycorner => "+",
+            body => $bodyContent,
+            bottomleftcorner => "+",
+            bottomrightcorner => "+",
+            flattopwall => "+",
+            flatleftwall => "+",
+            flatrightwall => "+",
+            flatbottomwall => "+",
+            halfvwalltop => "|",
+            halfvwallbottom => "|",
+            halfhwallleft => "-",
+            halfhwallright => "-",
+        },
+    };
+
+    my $bodyRows = int($cellSize / 2.5);
+    my @cellText;
+
+    # top line of the maze
+    unless ($self->north) {
+        my $top = '';
+        if (!$self->west) {
+            # top left corner
+            $top .= $characters->{$charset}{topleftcorner};
+        }
+        $top .= $characters->{$charset}{horizontalwall} x $cellSize;
+        if ($self->east) {
+            if ($self->linked($self->east)) {
+                $top .= $characters->{$charset}{horizontalwall};
+            } else {
+                $top .= $characters->{$charset}{flattopwall};
+            }
+        } else {
+            $top .= $characters->{$charset}{toprightcorner};
+        }
+        push @cellText, $top;
+    }
+
+    # body
+    while ($bodyRows--) {
+        my $body = '';
+        if (!$self->west) {
+            $body .= $characters->{$charset}{verticalwall};
+        }
+        $body .= $characters->{$charset}{body};
+        if ($self->east) {
+            if ($self->linked($self->east)) {
+              $body .= $characters->{$charset}{door};
+            } else {
+              $body .= $characters->{$charset}{verticalwall};
+            }
+        } else {
+            $body .= $characters->{$charset}{verticalwall};
+        }
+        push @cellText, $body;
+    }
+
+    # bottom
+    my $bottom = '';
+    if (!$self->west) {
+        if ($self->south) {
+            if ($self->linked($self->south)) {
+                $bottom .= $characters->{$charset}{verticalwall};
+            } else {
+                $bottom .= $characters->{$charset}{flatleftwall};
+            }
+        } else {
+          $bottom .= $characters->{$charset}{bottomleftcorner};
+        }
+    }
+    if ($self->south) {
+        if ($self->linked($self->south)) {
+            $bottom .= $characters->{$charset}{door} x $cellSize;
+        } else {
+            $bottom .= $characters->{$charset}{horizontalwall} x $cellSize;
+        }
+    } else {
+        $bottom .= $characters->{$charset}{horizontalwall} x $cellSize;
+    }
+
+    if ($self->east && $self->south) {
+        if ($self->linked($self->east) && $self->linked($self->south)) {        # linked east and linked south
+            # south not linked to it's east and east not linked to it's south
+            if (!$self->south->linked($self->south->east) && !$self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{topleftcorner};
+            # south not linked to it's east and east linked to it's south
+            } elsif (!$self->south->linked($self->south->east) && $self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{halfvwallbottom};
+            # south linked to it's east and east not linked to it's south
+            } elsif ($self->south->linked($self->south->east) && !$self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{halfhwallright};
+            # south linked to it's east and east linked to it's south
+            } elsif ($self->south->linked($self->south->east) && $self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{door};
+            }
+        } elsif ($self->linked($self->east) && !$self->linked($self->south)) {  # linked east not linked south
+            # south not linked to it's east and east not linked to it's south
+            if (!$self->south->linked($self->south->east) && !$self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{flattopwall};
+            # south not linked to it's east and east linked to it's south
+            } elsif (!$self->south->linked($self->south->east) && $self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{toprightcorner};
+            # south linked to it's east and east not linked to it's south
+            } elsif ($self->south->linked($self->south->east) && !$self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{horizontalwall};
+            # south linked to it's east and east linked to it's south
+            } elsif ($self->south->linked($self->south->east) && $self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{halfhwallleft};
+            }
+        } elsif (!$self->linked($self->east) && $self->linked($self->south)) {  # not linked east linked south
+            # south not linked to it's east and east not linked to it's south
+            if (!$self->south->linked($self->south->east) && !$self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{flatleftwall};
+            # south not linked to it's east and east linked to it's south
+            } elsif (!$self->south->linked($self->south->east) && $self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{verticalwall};
+            # south linked to it's east and east not linked to it's south
+            } elsif ($self->south->linked($self->south->east) && !$self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{bottomleftcorner};
+            # south linked to it's east and east linked to it's south
+            } elsif ($self->south->linked($self->south->east) && $self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{halfvwalltop};
+            }
+        } elsif (!$self->linked($self->east) && !$self->linked($self->south)) { # not linked east not linked south
+            # south not linked to it's east and east not linked to it's south
+            if (!$self->south->linked($self->south->east) && !$self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{fourwaycorner};
+            # south not linked to it's east and east linked to it's south
+            } elsif (!$self->south->linked($self->south->east) && $self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{flatrightwall};
+            # south linked to it's east and east not linked to it's south
+            } elsif ($self->south->linked($self->south->east) && !$self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{flatbottomwall};
+            # south linked to it's east and east linked to it's south
+            } elsif ($self->south->linked($self->south->east) && $self->east->linked($self->east->south)) {
+                $bottom .= $characters->{$charset}{bottomrightcorner};
+            }
+        }
+    } elsif ($self->east) {
+        if ($self->linked($self->east)) {
+            $bottom .= $characters->{$charset}{horizontalwall};
+        } else {
+            $bottom .= $characters->{$charset}{flatbottomwall};
+        }
+    } elsif ($self->south) {
+        if ($self->linked($self->south)) {
+            $bottom .= $characters->{$charset}{verticalwall};
+        } else {
+            $bottom .= $characters->{$charset}{flatrightwall};
+        }
+    } else {
+        $bottom .= $characters->{$charset}{bottomrightcorner};
+    }
+
+    push @cellText, $bottom;
+
+    return @cellText;
+}
+
 sub draw {
     my ($self, %params) = @_;
     my $cellSize = $params{cellsize} || 10;
     $cellSize = 3 if $cellSize < 3;
 
-    my $wallSize = $params{wallsize} || 1;
+    my $x1 = $self->column * $cellSize;
+    my $y1 = $self->row * $cellSize;
+    my $x2 = ($self->column + 1) * $cellSize;
+    my $y2 = ($self->row + 1) * $cellSize;
 
     my $img = $params{image};
-    if ($img) {
-        my $x1 = $self->column * $cellSize;
-        my $y1 = $self->row * $cellSize;
-        my $x2 = ($self->column + $wallSize) * $cellSize;
-        my $y2 = ($self->row + $wallSize) * $cellSize;
+    $img->line($x1,$y1,$x2,$y1) unless $self->north;
+    $img->line($x1,$y1,$x1,$y2) unless $self->west;
 
-        $img->moveTo($x1,$y1);
-        $img->lineTo($x2,$y1) unless $self->north;
-        $img->moveTo($x1,$y1);
-        $img->lineTo($x1,$y2) unless $self->west;
+    $img->line($x2,$y1,$x2,$y2) unless $self->linked($self->east);
+    $img->line($x1,$y2,$x2,$y2) unless $self->linked($self->south);
 
-        $img->moveTo($x2,$y1);
-        $img->lineTo($x2,$y2) unless $self->linked($self->east);
-        $img->moveTo($x1,$y2);
-        $img->lineTo($x2,$y2) unless $self->linked($self->south);
-
-        return $self;
-    } else {
-        my $utf8 = $params{utf8} || 0;
-        my $wall = $utf8 ? '|' : '|';
-        my $door = $utf8 ? ' ' : ' ';
-        my $corner = $utf8 ? '+' : '+';
-        my $southWall = $utf8 ? '-' : '-';
-        my $body = ' ' x $cellSize;
-        my $bodyRows = int($cellSize / 3);
-        my @cellText;
-
-        # top line
-        unless ($self->north) {
-            push @cellText, (($self->west ? '' : ($self->north ? ($self->linked($self->north) ? $wall : $corner) : $corner)) . ($southWall x $cellSize) . ($self->east ? ($self->linked($self->east) ? $southWall : $corner) : $corner));
-        }
-
-        # body
-        while ($bodyRows--) {
-            push @cellText, (($self->west ? '' : $wall) . $body . ($self->east ? ($self->linked($self->east) ? $door : $wall) : $wall));
-        }
-
-        # bottom
-        push @cellText, (($self->west ? '' : ($self->south ? ($self->linked($self->south) ? $wall : $corner) : $corner)) . ($self->linked($self->south) ? ($door x $cellSize) : ($southWall x $cellSize)) . ($self->east ? ($self->linked($self->east) ? $southWall : $corner) : $corner));
-
-        return @cellText;
-    }
+    return $self;
 }
 
-sub toString {
-}
 
 1;
+

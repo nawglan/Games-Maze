@@ -51,7 +51,7 @@ sub toString {
     while (my $cells = $iterator->()) {
         my @rowText;
         foreach my $cell (@$cells) {
-            my @cellText = $cell->draw(cellsize => $cellSize, utf8 => $utf8);
+            my @cellText = $cell->toString(cellsize => $cellSize, utf8 => $utf8);
             for (my $i = 0; $i < scalar @cellText; $i++) {
                 $rowText[$i] .= $cellText[$i];
             }
@@ -130,6 +130,30 @@ sub toImg {
     }
 
     close $IMGFILE;
+}
+
+sub toPDF {
+    my ($self, %params) = @_;
+    my $cellSize = $params{cellsize} || 10;
+    my $wallSize = $params{wallsize} || 1;
+    my $pageSize = $params{pagesize} || 'letter';
+    $cellSize = 3 if $cellSize < 3;
+
+    require PDF::Create or die 'Error: Unable to save as PDF. Please install PDF::Create.';
+    my $pdf = PDF::Create->new(
+        filename => $params{filename},
+        Author => $params{author} || 'Games::Maze CPAN Module',
+        Title => $params{title} || '',
+        CreationDate => [localtime]
+    );
+
+    # do this for each level
+    my $page = $pdf->new_page(MediaBox => $pdf->get_page_size($pageSize));
+    my $iterator = $self->eachCell();
+    while (my $cell = $iterator->()) {
+        $cell->draw(cellsize => $cellSize, wallsize => $wallSize, image => $page);
+    }
+    $pdf->close;
 }
 
 sub size {
